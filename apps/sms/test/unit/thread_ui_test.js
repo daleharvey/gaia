@@ -6,7 +6,7 @@
          MockContacts, ActivityHandler, Recipients, MockMozActivity,
          ThreadListUI, ContactRenderer, UIEvent, Drafts, OptionMenu,
          ActivityPicker, KeyEvent, MockNavigatorSettings, MockContactRenderer,
-         Draft, ErrorDialog, MockStickyHeader, MultiSimActionButton,
+         Draft, MockStickyHeader, MultiSimActionButton, Promise,
          MockLazyLoader
 */
 
@@ -1079,7 +1079,9 @@ suite('thread_ui.js >', function() {
         assert.isTrue(shouldEnableSend);
       });
 
-      test('banner is displayed', function() {
+      test('banner is displayed and stays', function() {
+        assert.isFalse(banner.classList.contains('hide'));
+        this.sinon.clock.tick(200000);
         assert.isFalse(banner.classList.contains('hide'));
       });
 
@@ -1116,7 +1118,9 @@ suite('thread_ui.js >', function() {
         assert.isFalse(shouldEnableSend);
       });
 
-      test('banner is displayed', function() {
+      test('banner is displayed and stays', function() {
+        assert.isFalse(banner.classList.contains('hide'));
+        this.sinon.clock.tick(200000);
         assert.isFalse(banner.classList.contains('hide'));
       });
 
@@ -1145,7 +1149,7 @@ suite('thread_ui.js >', function() {
           subject;
 
       setup(function() {
-        banner = document.getElementById('messages-max-length-notice');
+        banner = document.getElementById('messages-subject-max-length-notice');
         subject = document.getElementById('messages-subject-input');
         localize = this.sinon.spy(navigator.mozL10n, 'localize');
         Compose.toggleSubject();
@@ -1188,11 +1192,6 @@ suite('thread_ui.js >', function() {
 
         test('should be visible', function() {
           assert.isFalse(banner.classList.contains('hide'));
-        });
-
-        test('should be localized', function() {
-          assert.ok(localize.calledWith(banner.querySelector('p'),
-                    'messages-max-subject-length-text'));
         });
 
         test('should be hidden if focus is away', function() {
@@ -2025,6 +2024,30 @@ suite('thread_ui.js >', function() {
           assert.isTrue(this.container.classList.contains('sending'));
         });
       });
+      suite('Show error dialog while sending failed',
+        function() {
+        setup(function() {
+          this.sinon.spy(ThreadUI, 'showMessageError');
+          this.sinon.stub(Settings, 'switchMmsSimHandler')
+            .returns(Promise.resolve());
+        });
+        test('does not show dialog if error is not NonActiveSimCardError',
+          function() {
+          ThreadUI.onMessageFailed(this.fakeMessage);
+          sinon.assert.notCalled(ThreadUI.showMessageError);
+        });
+        test('Show dialog if error is NonActiveSimCardError',
+          function() {
+          ThreadUI.showErrorInFailedEvent = 'NonActiveSimCardError';
+          ThreadUI.onMessageFailed(this.fakeMessage);
+          sinon.assert.called(ThreadUI.showMessageError);
+          assert.equal(ThreadUI.showErrorInFailedEvent, '');
+          MockErrorDialog.calls[0][1].confirmHandler();
+          assert.isTrue(this.container.classList.contains('sending'));
+          assert.isFalse(this.container.classList.contains('error'));
+          sinon.assert.called(Settings.switchMmsSimHandler);
+        });
+      });
     });
 
     suite('onDeliverySuccess >', function() {
@@ -2674,7 +2697,8 @@ suite('thread_ui.js >', function() {
           });
 
           test('confirmHandler called with correct state', function() {
-            this.sinon.spy(Settings, 'switchMmsSimHandler');
+            this.sinon.stub(Settings, 'switchMmsSimHandler').returns(
+              Promise.resolve());
             this.sinon.stub(Settings, 'getServiceIdByIccId').returns(null);
             Settings.getServiceIdByIccId.withArgs('A').returns(0);
             Settings.getServiceIdByIccId.withArgs('B').returns(1);
@@ -4188,42 +4212,6 @@ suite('thread_ui.js >', function() {
         });
       });
 
-      suite('MMS, SMS serviceId is different than MMS serviceId,', function() {
-        var recipient, targetServiceId;
-
-        setup(function() {
-          this.sinon.spy(window, 'ErrorDialog');
-
-          Settings.mmsServiceId = 1;
-          targetServiceId = 0;
-
-          recipient = '999';
-
-          ThreadUI.recipients.add({
-            number: recipient
-          });
-
-          Compose.append(mockAttachment(512));
-
-          clickButtonAndSelectSim(targetServiceId);
-        });
-
-        test('asks user', function() {
-          sinon.assert.calledWith(
-            ErrorDialog, 'NonActiveSimCardToSendError'
-          );
-        });
-
-        test('user accepts, send the message with switching', function() {
-          ErrorDialog.yieldTo('confirmHandler');
-
-          sinon.assert.calledWithMatch(MessageManager.sendMMS, {
-            recipients: [recipient],
-            serviceId: targetServiceId
-          });
-        });
-      });
-
       suite('SIM picker', function() {
         test('loads and translates SIM picker', function() {
           var simPickerElt = document.getElementById('sim-picker');
@@ -4279,6 +4267,7 @@ suite('thread_ui.js >', function() {
         ThreadUI.recipients.add({
           number: '999'
         });
+        ThreadUI.showErrorInFailedEvent = '';
 
         Compose.append(mockAttachment(512));
 
@@ -4287,6 +4276,13 @@ suite('thread_ui.js >', function() {
 
       test('NotFoundError', function() {
         MessageManager.sendMMS.yieldTo('onerror', { name: 'NotFoundError' });
+        sinon.assert.notCalled(MockErrorDialog.prototype.show);
+      });
+
+      test('NonActiveSimCardError', function() {
+        MessageManager.sendMMS.yieldTo('onerror',
+          { name: 'NonActiveSimCardError' });
+        assert.equal(ThreadUI.showErrorInFailedEvent, 'NonActiveSimCardError');
         sinon.assert.notCalled(MockErrorDialog.prototype.show);
       });
 

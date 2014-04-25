@@ -716,19 +716,26 @@ class GaiaDevice(object):
         self.marionette.start_session()
 
         # Wait for the AppWindowManager to have registered the frame as active (loaded)
-        locator = (By.CSS_SELECTOR, 'div.appWindow.active.render')
+        locator = (By.CSS_SELECTOR, 'div.appWindow.active')
         Wait(marionette=self.marionette, timeout=timeout, ignored_exceptions=NoSuchElementException)\
             .until(lambda m: m.find_element(*locator).is_displayed())
 
         self.marionette.import_script(self.lockscreen_atom)
         self.update_checker.check_updates()
 
-    def stop_b2g(self):
+    @property
+    def is_b2g_running(self):
+        return 'b2g' in self.manager.shellCheckOutput(['toolbox', 'ps'])
+
+    def stop_b2g(self, timeout=5):
         if self.marionette.instance:
             # close the gecko instance attached to marionette
             self.marionette.instance.close()
         elif self.is_android_build:
             self.manager.shellCheckOutput(['stop', 'b2g'])
+            Wait(self.marionette, timeout=timeout).until(
+                lambda m: not self.is_b2g_running,
+                message='b2g failed to stop.')
         else:
             raise Exception('Unable to stop B2G')
         self.marionette.client.close()

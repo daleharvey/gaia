@@ -72,6 +72,8 @@ var ThreadUI = global.ThreadUI = {
   inThread: false,
   isNewMessageNoticeShown: false,
   shouldChangePanelNextEvent: false,
+  showErrorInFailedEvent: '',
+
   timeouts: {
     update: null,
     subjectLengthNotice: null
@@ -95,7 +97,8 @@ var ThreadUI = global.ThreadUI = {
       'attach-button', 'delete-button', 'cancel-button', 'subject-input',
       'new-message-notice', 'options-icon', 'edit-mode', 'edit-form',
       'tel-form', 'header-text', 'max-length-notice', 'convert-notice',
-      'resize-notice', 'dual-sim-information'
+      'resize-notice', 'dual-sim-information',
+      'new-message-notice', 'subject-max-length-notice'
     ].forEach(function(id) {
       this[Utils.camelCase(id)] = document.getElementById('messages-' + id);
     }, this);
@@ -309,6 +312,7 @@ var ThreadUI = global.ThreadUI = {
     this.HEADER_HEIGHT = document.querySelector('.view-header').offsetHeight;
 
     this.shouldChangePanelNextEvent = false;
+    this.showErrorInFailedEvent = '';
 
     ThreadUI.updateInputMaxHeight();
   },
@@ -519,27 +523,40 @@ var ThreadUI = global.ThreadUI = {
     // Handling user warning for max character reached
     // Only show the warning when the subject field has the focus
     if (this.subjectInput.value.length === Compose.subjectMaxLength) {
-      this.showMaxLengthNotice('messages-max-subject-length-text');
+      this.showSubjectMaxLengthNotice();
     } else {
-      this.hideMaxLengthNotice();
+      this.hideSubjectMaxLengthNotice();
     }
   },
 
   onSubjectBlur: function thui_onSubjectBlur() {
-    this.hideMaxLengthNotice();
+    this.hideSubjectMaxLengthNotice();
   },
+
   showMaxLengthNotice: function thui_showMaxLengthNotice(l10nKey) {
     navigator.mozL10n.localize(
       this.maxLengthNotice.querySelector('p'), l10nKey);
     this.maxLengthNotice.classList.remove('hide');
+  },
+
+  hideMaxLengthNotice: function thui_hideMaxLengthNotice() {
+    this.maxLengthNotice.classList.add('hide');
+  },
+
+  showSubjectMaxLengthNotice: function thui_showSubjectMaxLengthNotice() {
+    this.subjectMaxLengthNotice.classList.remove('hide');
+
     if (this.timeouts.subjectLengthNotice) {
       clearTimeout(this.timeouts.subjectLengthNotice);
     }
-    this.timeouts.subjectLengthNotice =
-      setTimeout(this.hideMaxLengthNotice.bind(this), this.BANNER_DURATION);
+    this.timeouts.subjectLengthNotice = setTimeout(
+      this.hideSubjectMaxLengthNotice.bind(this),
+      this.BANNER_DURATION
+    );
   },
-  hideMaxLengthNotice: function thui_hideMaxLengthNotice() {
-    this.maxLengthNotice.classList.add('hide');
+
+  hideSubjectMaxLengthNotice: function thui_hideSubjectMaxLengthNotice() {
+    this.subjectMaxLengthNotice.classList.add('hide');
     this.timeouts.subjectLengthNotice &&
       clearTimeout(this.timeouts.subjectLengthNotice);
   },
@@ -2044,15 +2061,7 @@ var ThreadUI = global.ThreadUI = {
         if (lineClassList.contains('error')) {
           params.items.push({
             l10nId: 'resend-message',
-            method: function resendMessage(messageId) {
-              messageId = +messageId;
-              var request = MessageManager.getMessage(messageId);
-              request.onsuccess = (function() {
-                var message = request.result;
-                messageBubble.node.parentNode.remove();
-                MessageManager.resendMessage(message);
-              }).bind(this);
-            },
+            method: this.resendMessage.bind(this, messageId),
             params: [messageId]
           });
         }
@@ -2134,11 +2143,13 @@ var ThreadUI = global.ThreadUI = {
   },
 
   sendMessage: function thui_sendMessage(opts) {
-    var serviceId = opts && opts.serviceId;
-    var messageType = Compose.type;
+    var content = Compose.getContent(),
+        subject = Compose.getSubject(),
+        messageType = Compose.type,
+        serviceId = opts.serviceId === undefined ? null : opts.serviceId,
+        recipients;
 
     var inComposer = window.location.hash === '#new';
-    var recipients;
 
     // Depending where we are, we get different nums
     if (inComposer) {
@@ -2149,36 +2160,6 @@ var ThreadUI = global.ThreadUI = {
     } else {
       recipients = Threads.active.participants;
     }
-
-    var next = function next() {
-      this.doSendMessage({
-        content: Compose.getContent(),
-        subject: Compose.getSubject(),
-        messageType: Compose.type,
-        recipients: recipients,
-        serviceId: serviceId,
-      });
-    }.bind(this);
-
-    if (messageType === 'sms' ||
-      !Settings.hasSeveralSim() ||
-      serviceId === Settings.mmsServiceId) {
-      next();
-    } else {
-      this.showMessageError(
-        'NonActiveSimCardToSendError', { confirmHandler: next }
-      );
-    }
-  },
-
-  doSendMessage: function thui_sendMessage(opts) {
-    var content = opts.content,
-        subject = opts.subject,
-        messageType = opts.messageType,
-        recipients = opts.recipients,
-        serviceId = opts.serviceId === undefined ? null : opts.serviceId;
-
-    var inComposer = window.location.hash === '#new';
 
     // Clean composer fields (this lock any repeated click in 'send' button)
     this.cleanFields(true);
@@ -2218,7 +2199,7 @@ var ThreadUI = global.ThreadUI = {
             });
 
             for (var key in errors) {
-              this.showMessageError(key, {recipients: errors[key]});
+              this.showMessageSendingError(key, {recipients: errors[key]});
             }
           }
         }.bind(this)
@@ -2241,11 +2222,7 @@ var ThreadUI = global.ThreadUI = {
         serviceId: serviceId,
         onerror: function onError(error) {
           var errorName = error.name;
-          if (errorName === 'NotFoundError') {
-            console.info('The message was deleted or is no longer available.');
-            return;
-          }
-          this.showMessageError(errorName);
+          this.showMessageSendingError(errorName);
         }.bind(this)
       };
 
@@ -2272,6 +2249,7 @@ var ThreadUI = global.ThreadUI = {
 
   onMessageFailed: function thui_onMessageFailed(message) {
     var messageDOM = document.getElementById('message-' + message.id);
+    var serviceId = Settings.getServiceIdByIccId(message.iccId);
     // When this is the first message in a thread, we haven't displayed
     // the new thread yet. The error flag will be shown when the thread
     // will be rendered. See Bug 874043
@@ -2285,6 +2263,27 @@ var ThreadUI = global.ThreadUI = {
       // Update class names to reflect message state
       messageDOM.classList.remove('sending');
       messageDOM.classList.add('error');
+    }
+
+    if (this.showErrorInFailedEvent === 'NonActiveSimCardError') {
+      this.showErrorInFailedEvent = '';
+      this.showMessageError(
+        'NonActiveSimCardToSendError',
+        {
+          confirmHandler: function() {
+            // Update messageDOM state to 'sending' while sim switching 
+            messageDOM.classList.remove('error');
+            messageDOM.classList.add('sending');
+
+            Settings.switchMmsSimHandler(serviceId).then(
+              this.resendMessage.bind(this, message.id))
+            .catch(function(err) {
+                err && console.error(
+                  'Unexpected error while resending the MMS message', err);
+            });
+          }.bind(this)
+        }
+      );
     }
   },
 
@@ -2316,6 +2315,23 @@ var ThreadUI = global.ThreadUI = {
     }
     // Update class names to reflect message state
     messageDOM.classList.add('delivered');
+  },
+
+  // Some error return from sending error need some specific action instead of
+  // showing the error prompt directly.
+  showMessageSendingError: function thui_showMsgSendingError(errorName, opts) {
+    // TODO: We handle NonActiveSimCard error in onMessageFailed because we
+    // could not get message id from this error handler. Need to be removed when
+    // bug 824717 is landed.
+    if (errorName === 'NonActiveSimCardError') {
+      this.showErrorInFailedEvent = errorName;
+      return;
+    }
+    if (errorName === 'NotFoundError') {
+      console.info('The message was deleted or is no longer available.');
+      return;
+    }
+    this.showMessageError(errorName, opts);
   },
 
   showMessageError: function thui_showMessageOnError(errorName, opts) {
@@ -2386,8 +2402,12 @@ var ThreadUI = global.ThreadUI = {
             messageDOM.classList.add('pending');
             messageDOM.classList.remove('error');
             navigator.mozL10n.localize(button, 'downloading');
-            Settings.switchMmsSimHandler(serviceId,
-              this.retrieveMMS.bind(this, messageDOM));
+            Settings.switchMmsSimHandler(serviceId).then(
+              this.retrieveMMS.bind(this, messageDOM))
+            .catch(function(err) {
+                err && console.error(
+                  'Unexpected error while resending the MMS message', err);
+            });
           }.bind(this)
         });
       }
@@ -2408,9 +2428,14 @@ var ThreadUI = global.ThreadUI = {
       // - resend accepts a optional callback that follows with
       // the result of the resending
       var messageDOM = document.getElementById('message-' + id);
+      var resendOpts = {
+        onerror: function onError(error) {
+          var errorName = error.name;
+          this.showMessageSendingError(errorName);
+        }.bind(this)
+      };
       this.removeMessageDOM(messageDOM);
-
-      MessageManager.resendMessage(message);
+      MessageManager.resendMessage(message, resendOpts);
     }).bind(this);
   },
 
