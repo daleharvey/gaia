@@ -133,10 +133,6 @@ function execute(config) {
     settings['developer.menu.enabled'] = true;
   }
 
-  // Set the homescreen URL
-  settings['homescreen.manifestURL'] = utils.gaiaManifestURL('homescreen',
-    config.GAIA_SCHEME, config.GAIA_DOMAIN, config.GAIA_PORT);
-
   // Set the ftu manifest URL
   if (config.NOFTU === '0') {
     settings['ftu.manifestURL'] = utils.gaiaManifestURL('communications',
@@ -153,6 +149,11 @@ function execute(config) {
   if (config.HAIDA) {
     settings['rocketbar.enabled'] = true;
     settings['edgesgesture.enabled'] = true;
+    settings['homescreen.manifestURL'] = utils.gaiaManifestURL('home2',
+      config.GAIA_SCHEME, config.GAIA_DOMAIN, config.GAIA_PORT);
+  } else {
+    settings['homescreen.manifestURL'] = utils.gaiaManifestURL('homescreen',
+      config.GAIA_SCHEME, config.GAIA_DOMAIN, config.GAIA_PORT);
   }
 
   settings['debugger.remote-mode'] = config.REMOTE_DEBUGGER ? 'adb-only'

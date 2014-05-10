@@ -306,6 +306,13 @@ ifndef GAIA_APP_CONFIG
 GAIA_APP_CONFIG=$(GAIA_DIR)$(SEP)build$(SEP)config$(SEP)$(GAIA_DEVICE_TYPE)$(SEP)apps-$(GAIA_APP_TARGET).list
 endif
 
+ifdef HAIDA
+  HAIDA_CONFIG=/tmp/gaia-apps-haida.list
+  $(shell cp $(GAIA_APP_CONFIG) $(HAIDA_CONFIG))
+  $(shell echo "dev_apps/home2" >> $(HAIDA_CONFIG))
+  GAIA_APP_CONFIG=$(HAIDA_CONFIG)
+endif
+
 ifndef GAIA_DISTRIBUTION_DIR
   GAIA_DISTRIBUTION_DIR := $(GAIA_DIR)$(SEP)distribution
 else
