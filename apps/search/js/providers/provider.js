@@ -1,6 +1,9 @@
 'use strict';
 /* global UrlHelper */
 
+var grid = document.getElementById('icons');
+var globalIndex = 0;
+
 /**
  * Base Provider class
  */
@@ -33,6 +36,7 @@ Provider.prototype = {
    * Clears the rendered results of this provider from the app grid
    */
   clear: function() {
+    grid.clear();
     this.container.innerHTML = '';
   },
 
@@ -61,69 +65,34 @@ Provider.prototype = {
    * - description: Additional description for the result.
    */
   buildResultsDom: function(results) {
-    //<div class="result" data-url="mozilla.com" role="link"
-    //  aria-label="My Urlasljd alskdja lsdjka sldjk"
-    //  aria-describedby="description-0">
-    //  <img role="presentation" class="icon" src="..." />
-    //  <div class="urlwrapper">
-    //    <span class="title">My Urlasljd <span class="highlight">alskd</span>
-    //      ja lsdjka sldjk</span>
-    //    <small id="description-0" class="url"
-    //      aria-label="http://url.com">http://url.com</small>
-    //  </div>
-    //</div>
+    grid.clear();
 
-    var frag = document.createDocumentFragment();
+    window.dispatchEvent(new CustomEvent('appzoom', {
+      'detail': {
+        cols: 4
+      }
+    }));
+
     results.forEach(function(config, index) {
 
-      var result = document.createElement('div');
-      var icon = document.createElement('img');
-      var description = document.createElement('div');
-      var title = document.createElement('span');
-      var meta = document.createElement('small');
+      var bookmark = {
+        id: ++globalIndex,
+        name: config.title,
+        url: config.dataset.url
+      };
 
-      result.classList.add('result');
-      icon.classList.add('icon');
-      description.classList.add('description');
-      title.classList.add('title');
-      meta.classList.add('meta');
-
-      for (var i in config.dataset) {
-        result.dataset[i] = config.dataset[i];
+      if (config.icon) {
+        bookmark.icon = config.icon;
       }
 
-      if (config.icon && UrlHelper.hasScheme(config.icon)) {
-        icon.src = config.icon;
-      } else if (config.icon) {
-        icon.src = window.URL.createObjectURL(config.icon);
-        icon.onload = function() { window.URL.revokeObjectURL(icon.src); };
-      } else {
-        icon.classList.add('empty');
-      }
-      icon.setAttribute('role', 'presentation');
+      grid.add(new Bookmark(bookmark));
 
-      title.innerHTML = config.title;
-      if (config.meta) {
-        meta.innerHTML = config.meta;
-        // Expose meta infrormation as a helpful description for each result.
-        if (config.description) {
-          meta.id = this.name + '-description-' + index;
-          meta.setAttribute('aria-label', config.description);
-          result.setAttribute('aria-describedby', meta.id);
-        }
-      }
+    });
 
-      result.setAttribute('role', 'link');
-      // Either use an explicit label or, if not present, title.
-      result.setAttribute('aria-label', config.label || config.title);
+    grid.render();
 
-      description.appendChild(title);
-      description.appendChild(meta);
-      result.appendChild(icon);
-      result.appendChild(description);
-      frag.appendChild(result);
-    }, this);
-    return frag;
+    // Remove
+    return document.createDocumentFragment();
   },
 
   render: function(results) {
