@@ -757,7 +757,7 @@
      */
     handleCancel: function(e) {
       this.input.value = '';
-      this.handleInput();
+      this.hideResults();
       this.deactivate();
     },
 
