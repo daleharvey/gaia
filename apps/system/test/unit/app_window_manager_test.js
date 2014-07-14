@@ -4,7 +4,7 @@
 'use strict';
 
 requireApp('system/shared/test/unit/mocks/mock_manifest_helper.js');
-requireApp('system/test/unit/mock_system.js');
+require('/shared/test/unit/mocks/mock_system.js');
 requireApp('system/test/unit/mock_orientation_manager.js');
 requireApp('system/test/unit/mock_applications.js');
 requireApp('system/test/unit/mock_activity_window.js');
@@ -31,9 +31,17 @@ suite('system/AppWindowManager', function() {
   mocksForAppWindowManager.attachTestHelpers();
   var stubById;
   var app1, app2, app3, app4, app5, app6, app7, home;
+
+  var screenElement = document.createElement('div');
+
   setup(function(done) {
-    stubById = this.sinon.stub(document, 'getElementById');
-    stubById.returns(document.createElement('div'));
+    stubById = this.sinon.stub(document, 'getElementById', function(id) {
+      if (id === 'screen') {
+        return screenElement;
+      }
+
+      return document.createElement('div');
+    });
 
     window.layoutManager = new window.LayoutManager();
 
@@ -692,6 +700,12 @@ suite('system/AppWindowManager', function() {
     test('continuous-transition.enabled', function() {
       MockSettingsListener.mCallbacks['continuous-transition.enabled'](true);
       assert.isTrue(AppWindowManager.continuousTransition);
+    });
+
+    test('app-brandcolor.enabled', function() {
+      MockSettingsListener.mCallbacks['app-brandcolor.enabled'](true);
+
+      assert.isTrue(screenElement.classList.contains('brandcolor-active'));
     });
   });
 
