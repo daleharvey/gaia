@@ -58,10 +58,10 @@
       Search.navigate(url);
     },
 
-    search: function(input, preventRemote) {
+    search: function(input) {
       this.render([input]);
 
-      if (preventRemote) {
+      if (!navigator.onLine || Search.preventRemoteFetch) {
         return Promise.resolve([input]);
       }
 

@@ -22,6 +22,8 @@
 
     gridCount: 0,
 
+    preventRemoteFetch: true,
+
     searchResults: document.getElementById('search-results'),
 
     offlineMessage: document.getElementById('offline-message'),
@@ -137,12 +139,12 @@
         Object.keys(providers).forEach((providerKey) => {
           var provider = providers[providerKey];
 
-          var preventRemoteFetch =
+          this.preventRemoteFetch =
             UrlHelper.isURL(input) ||
             msg.data.isPrivateBrowser ||
             !this.suggestionsEnabled;
 
-          if (provider.remote && preventRemoteFetch) {
+          if (provider.remote && this.preventRemoteFetch) {
             return;
           }
 
@@ -156,7 +158,7 @@
             }
           }
 
-          provider.search(input, preventRemoteFetch).then((results) => {
+          provider.search(input).then((results) => {
             this.collect(provider, results);
           });
         });
